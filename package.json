@@ -1,0 +1,12 @@
+{
+  "name": "avan-lib",
+  "version": "0.0.1",
+  "description": "The public repository of avan.",
+  "scripts": {},
+  "keywords": [],
+  "author": {
+    "name": "Avan",
+    "email": "layouwen@gmail.com"
+  },
+  "license": "ISC"
+}
