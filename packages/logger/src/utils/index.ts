@@ -1,59 +1,94 @@
-import log4js from 'log4js';
-import path from 'path';
+import winston, { format, transports } from "winston";
+import DailyRotateFile from "winston-daily-rotate-file";
+import { SPLAT } from "triple-beam";
+import path from "path";
+
+const getTimestampFormat = () =>
+  format.timestamp({
+    format: "YYYY-MM-DD HH:mm:ss",
+  });
+
+const getErrorsFormat = () => format.errors({ stack: true });
+
+const getPrintfFormat = () =>
+  format.printf(({ level, service, timestamp, message, ...rest }) => {
+    const parseMessage = (message: any) => {
+      return typeof message === "object" ? JSON.stringify(message) : message;
+    };
+
+    let result = `[${timestamp}] [${service}] [${level.toUpperCase()}]: ${parseMessage(
+      message
+    )}`;
+
+    const splat = rest[SPLAT];
+    if (splat?.length) {
+      splat.forEach((i: any) => {
+        result += ` ${parseMessage(i)}`;
+      });
+    }
+
+    return result;
+  });
+
+const getBaseFormat = () =>
+  format.combine(getTimestampFormat(), getErrorsFormat(), getPrintfFormat());
 
 export class Logger {
-  private readonly logger: log4js.Log4js;
+  error: winston.Logger;
+  daily: winston.Logger;
+  debug: winston.Logger;
 
-  debug: log4js.Logger;
-  error: log4js.Logger;
-  daily: log4js.Logger;
-
-  constructor (logPath: string) {
-    this.logger = log4js;
-    this.logger.configure({
-      appenders: {
-        console: {type: 'console'},
-        debug: {
-          type: 'file',
-          filename: path.join(logPath, 'debug.log'),
-        },
-        daily: {
-          type: 'dateFile',
-          filename: path.join(logPath, 'daily', 'daily.log'),
-          pattern: 'yyyy-MM-dd',
-          alwaysIncludePattern: true,
-          keepFileExt: true,
-        },
-        error: {
-          type: 'dateFile',
-          filename: path.join(logPath, 'error', 'error.log'),
-          pattern: 'yyyy-MM-dd',
-          alwaysIncludePattern: true,
-          keepFileExt: true,
-        },
-      },
-      categories: {
-        default: {
-          appenders: ['console', 'debug'],
-          level: 'all',
-        },
-        debug: {
-          appenders: ['console', 'debug'],
-          level: 'all',
-        },
-        daily: {
-          appenders: ['console', 'daily'],
-          level: 'all',
-        },
-        error: {
-          appenders: ['console', 'error'],
-          level: 'all',
-        },
-      },
+  constructor({
+    logPath = path.resolve(process.cwd(), "logs"),
+    projectName = "project",
+  }: {
+    logPath?: string;
+    projectName?: string;
+  } = {}) {
+    this.error = winston.createLogger({
+      level: "debug",
+      defaultMeta: { service: projectName },
+      format: getBaseFormat(),
+      transports: [
+        new DailyRotateFile({
+          level: "debug",
+          dirname: path.join(logPath, "error"),
+          filename: "error.%DATE%.log",
+          datePattern: "YYYY-MM-DD",
+          // maxSize: '20m',
+          // maxFiles: '14d',
+        }),
+        new transports.Console(),
+      ],
     });
 
-    this.daily = this.logger.getLogger('daily');
-    this.debug = this.logger.getLogger('debug');
-    this.error = this.logger.getLogger('error');
+    this.daily = winston.createLogger({
+      level: "debug",
+      defaultMeta: { service: projectName },
+      format: getBaseFormat(),
+      transports: [
+        new DailyRotateFile({
+          level: "debug",
+          dirname: path.resolve(logPath, "daily"),
+          filename: "daily.%DATE%.log",
+          datePattern: "YYYY-MM-DD",
+        }),
+        new transports.Console(),
+      ],
+    });
+
+    this.debug = winston.createLogger({
+      level: "debug",
+      defaultMeta: { service: projectName },
+      format: getBaseFormat(),
+      transports: [
+        new transports.File({
+          level: "debug",
+          dirname: path.resolve(logPath),
+          filename: "debug.log",
+        }),
+        new transports.Console(),
+      ],
+    });
   }
 }
